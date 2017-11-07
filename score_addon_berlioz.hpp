@@ -18,7 +18,8 @@ class score_addon_berlioz final :
         public QObject,
         public score::Plugin_QtInterface,
         public score::FactoryInterface_QtInterface,
-        public score::CommandFactory_QtInterface
+        public score::CommandFactory_QtInterface,
+        public score::ApplicationPlugin_QtInterface
 {
         Q_OBJECT
         Q_PLUGIN_METADATA(IID FactoryInterface_QtInterface_iid)
@@ -26,6 +27,7 @@ class score_addon_berlioz final :
                 score::Plugin_QtInterface
                 score::FactoryInterface_QtInterface
                 score::CommandFactory_QtInterface
+                score::ApplicationPlugin_QtInterface
                 )
 
   SCORE_PLUGIN_METADATA(1, "4e83b5ca-c0f2-4e83-85fc-d1cca17683b6")
@@ -40,4 +42,6 @@ class score_addon_berlioz final :
                 const score::InterfaceKey& key) const override;
 
         std::pair<const CommandGroupKey, CommandGeneratorMap> make_commands() override;
+
+        score::GUIApplicationPlugin* make_guiApplicationPlugin(const score::GUIApplicationContext& app) override;
 };

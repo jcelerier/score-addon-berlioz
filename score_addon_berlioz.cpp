@@ -7,6 +7,7 @@
 #include <berlioz/LocalTree.hpp>
 #include <berlioz/Layer.hpp>
 #include <berlioz/CommandFactory.hpp>
+#include <berlioz/ApplicationPlugin.hpp>
 
 #include <score/plugins/customfactory/FactorySetup.hpp>
 
@@ -55,4 +56,9 @@ score_addon_berlioz::make_commands()
     for_each_type<Types>(score::commands::FactoryInserter{cmds.second});
 
     return cmds;
+}
+
+score::GUIApplicationPlugin*score_addon_berlioz::make_guiApplicationPlugin(const score::GUIApplicationContext& app)
+{
+  return new berlioz::ApplicationPlugin{app};
 }

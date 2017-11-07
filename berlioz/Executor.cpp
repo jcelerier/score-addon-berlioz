@@ -9,7 +9,7 @@
 #include <Media/AudioDecoder.hpp>
 #undef slots
 #include <pybind11/embed.h>
-#include <valgrind/callgrind.h>
+#include <berlioz/ApplicationPlugin.hpp>
 namespace berlioz
 {
 class berlioz_node : public ossia::graph_node
@@ -34,13 +34,7 @@ class berlioz_node : public ossia::graph_node
 
     std::shared_ptr<ossia::sound_node> cur_node;
 
-    static pybind11::module& module()
-    {
-      static pybind11::scoped_interpreter guard{};
-      static pybind11::module go = pybind11::module::import("generateOrchestration");
-      return go;
-    }
-    berlioz_node()
+    berlioz_node(const pybind11::module& module)
     {
       namespace py = pybind11;
       auto op = ossia::make_outlet<ossia::audio_port>();
@@ -55,7 +49,7 @@ class berlioz_node : public ossia::graph_node
             std::map<float, std::string> files;
 
             try {
-              auto fun = module().attr("generateBrass");
+              auto fun = module.attr("generateBrass");
               for(int i = 0; i < 1; i++)
               {
                 pybind11::tuple res = fun(cur.attribute, cur.nInstruments).cast<pybind11::tuple>();
@@ -82,12 +76,11 @@ class berlioz_node : public ossia::graph_node
     ~berlioz_node()
     {
       running = false;
-      thread.join();
+      if(thread.joinable())
+        thread.join();
     }
     void run(ossia::token_request tk, ossia::execution_state& st) override
     {
-      using namespace std::chrono;
-      using clk = steady_clock;
       if(tk.date > (last_tick + rate) || tk.date == ossia::Zero)
       {
         last_tick = tk.date;
@@ -96,13 +89,11 @@ class berlioz_node : public ossia::graph_node
 
       if(cur_node)
       {
-        cur_node->outputs() = outputs();
         req.date += tk.date - m_prev_date;
         if(req.date < cur_node->duration())
         {
           req.offset = tk.offset;
-          //qDebug() << "Runnning with " << req.date << req.offset << req_prev_date;
-          cur_node->run(tk, st);
+          cur_node->run(req, st);
           cur_node->set_prev_date(req.date);
           req_prev_date = req.date;
         }
@@ -113,11 +104,13 @@ class berlioz_node : public ossia::graph_node
       }
 
       if(!cur_node)
-      while(retrieve_files.try_dequeue(cur_node))
       {
-        qDebug() << "Changing node";
-        req.date = 0;
-        req_prev_date = 0;
+        while(retrieve_files.try_dequeue(cur_node))
+        {
+          req.date = 0;
+          req_prev_date = 0;
+          cur_node->outputs() = outputs();
+        }
       }
     }
 };
@@ -130,7 +123,7 @@ ProcessExecutorComponent::ProcessExecutorComponent(
   ProcessComponent_T{
     parentInterval, element, ctx, id, "berliozExecutorComponent", parent}
 {
-  auto node = std::make_shared<berlioz_node>();
+  auto node = std::make_shared<berlioz_node>(ctx.doc.app.guiApplicationPlugin<ApplicationPlugin>().module());
   node->rate = element.rate();
 
   m_ossia_process = std::make_shared<ossia::node_process>(node);

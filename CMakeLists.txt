@@ -7,6 +7,7 @@ score_common_setup()
 
 # Source files
 set(HDRS
+    berlioz/ApplicationPlugin.hpp
     berlioz/Executor.hpp
     berlioz/Inspector.hpp
     berlioz/LocalTree.hpp
@@ -20,6 +21,7 @@ set(HDRS
     score_addon_berlioz.hpp
 )
 set(SRCS
+    berlioz/ApplicationPlugin.cpp
     berlioz/Executor.cpp
     berlioz/Inspector.cpp
     berlioz/LocalTree.cpp
