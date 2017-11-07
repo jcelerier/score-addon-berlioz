@@ -31,8 +31,7 @@ class InspectorFactory final :
 
 class SetStartAttribute final : public score::PropertyCommand
 {
-      SCORE_COMMAND_DECL(
-        CommandFactoryName(), SetStartAttribute, "Set start attribute")
+      SCORE_COMMAND_DECL(CommandFactoryName(), SetStartAttribute, "Set start attribute")
   public:
     SetStartAttribute(
         const Model& event,
@@ -45,8 +44,7 @@ class SetStartAttribute final : public score::PropertyCommand
 
 class SetEndAttribute final : public score::PropertyCommand
 {
-      SCORE_COMMAND_DECL(
-        CommandFactoryName(), SetEndAttribute, "Set end attribute")
+      SCORE_COMMAND_DECL(CommandFactoryName(), SetEndAttribute, "Set end attribute")
   public:
     SetEndAttribute(
         const Model& event,
@@ -60,8 +58,7 @@ class SetEndAttribute final : public score::PropertyCommand
 
 class SetInstrus final : public score::PropertyCommand
 {
-    SCORE_COMMAND_DECL(
-        CommandFactoryName(), SetInstrus, "Set instrus")
+    SCORE_COMMAND_DECL(CommandFactoryName(), SetInstrus, "Set instrus")
     public:
       SetInstrus(
         const Model& event,
@@ -75,8 +72,7 @@ class SetInstrus final : public score::PropertyCommand
 
 class SetRate final : public score::PropertyCommand
 {
-    SCORE_COMMAND_DECL(
-        CommandFactoryName(), SetRate, "Set rate")
+    SCORE_COMMAND_DECL(CommandFactoryName(), SetRate, "Set rate")
     public:
       SetRate(
         const Model& event,
