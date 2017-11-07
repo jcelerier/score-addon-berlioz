@@ -9,6 +9,7 @@
 #include <Media/AudioDecoder.hpp>
 #undef slots
 #include <pybind11/embed.h>
+#include <valgrind/callgrind.h>
 namespace berlioz
 {
 class berlioz_node : public ossia::graph_node
@@ -19,8 +20,8 @@ class berlioz_node : public ossia::graph_node
     struct chord_request
     {
         std::vector<std::string> instruments;
-        std::string attribute;
-        int nInstruments{4};
+        std::string attribute = "Brightness";
+        int nInstruments{2};
 
 
     };
@@ -29,37 +30,53 @@ class berlioz_node : public ossia::graph_node
     std::thread thread;
     std::atomic_bool running{true};
     ossia::token_request req{};
+    ossia::time_value req_prev_date{};
 
     std::shared_ptr<ossia::sound_node> cur_node;
 
+    static pybind11::module& module()
+    {
+      static pybind11::scoped_interpreter guard{};
+      static pybind11::module go = pybind11::module::import("generateOrchestration");
+      return go;
+    }
     berlioz_node()
     {
       namespace py = pybind11;
       auto op = ossia::make_outlet<ossia::audio_port>();
       m_outlets.push_back(op);
       thread = std::thread{[=] {
-        pybind11::scoped_interpreter guard{};
-        py::eval_file("/home/jcelerier/generateOrchestration/generateOrchestration.py");
-        while(true)
+        using namespace pybind11::literals;
+        while(running)
         {
           chord_request cur;
           while(request_chords.try_dequeue(cur)) {
             // call python function
-            std::cout << std::flush;
-            pybind11::tuple res = py::eval("generateOrchestration(instru=instruments, vattribute='Brightness', nInstruments=4)").cast<pybind11::tuple>();
+            std::map<float, std::string> files;
 
+            try {
+              auto fun = module().attr("generateBrass");
+              for(int i = 0; i < 1; i++)
+              {
+                pybind11::tuple res = fun(cur.attribute, cur.nInstruments).cast<pybind11::tuple>();
+                files.insert({res[0].cast<float>(), res[1].cast<std::string>()});
+              }
 
-            auto file = "/home/jcelerier/build-i-score-Desktop-Debug/sounds/generation/9triad._sounds_tuba_staccato_F_F2._sounds_trumpet_sforzando_A_A5._sounds_trombone_sforzando_C_C4.wav";
-            auto decoded = Media::AudioDecoder::decode_synchronous(file);
-            if(decoded)
+              auto decoded = Media::AudioDecoder::decode_synchronous(QString::fromStdString(files.begin()->second));
+              if(decoded)
+              {
+                auto node = std::make_shared<ossia::sound_node>();
+                node->set_sound(std::move(decoded->second));
+                retrieve_files.enqueue(node);
+              }
+            } catch(const std::exception& e)
             {
-              auto node = std::make_shared<ossia::sound_node>();
-              node->set_sound(std::move(decoded->second));
-              retrieve_files.enqueue(node);
+              qDebug() << "PyBind error: " << e.what();
             }
+
           }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }};
     }
     ~berlioz_node()
@@ -69,7 +86,9 @@ class berlioz_node : public ossia::graph_node
     }
     void run(ossia::token_request tk, ossia::execution_state& st) override
     {
-      if(tk.date > (last_tick + rate))
+      using namespace std::chrono;
+      using clk = steady_clock;
+      if(tk.date > (last_tick + rate) || tk.date == ossia::Zero)
       {
         last_tick = tk.date;
         request_chords.enqueue({});
@@ -79,14 +98,26 @@ class berlioz_node : public ossia::graph_node
       {
         cur_node->outputs() = outputs();
         req.date += tk.date - m_prev_date;
-        req.offset = tk.offset;
-        cur_node->run(tk, st);
+        if(req.date < cur_node->duration())
+        {
+          req.offset = tk.offset;
+          //qDebug() << "Runnning with " << req.date << req.offset << req_prev_date;
+          cur_node->run(tk, st);
+          cur_node->set_prev_date(req.date);
+          req_prev_date = req.date;
+        }
+        else
+        {
+          cur_node = {};
+        }
       }
 
-      std::shared_ptr<ossia::sound_node> n;
-      while(retrieve_files.try_dequeue(n))
+      if(!cur_node)
+      while(retrieve_files.try_dequeue(cur_node))
       {
-        cur_node = n;
+        qDebug() << "Changing node";
+        req.date = 0;
+        req_prev_date = 0;
       }
     }
 };
