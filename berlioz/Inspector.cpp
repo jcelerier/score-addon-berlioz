@@ -18,7 +18,6 @@ InspectorWidget::InspectorWidget(
     m_dispatcher{context.commandStack}
 {
     auto lay = new QFormLayout{this};
-    lay->addWidget(new QLabel("change me"));
 
     auto start = new QComboBox{this};
     start->addItems({"Brightness", "Dullness", "Warmth", "Roughness", "Breathiness"});
