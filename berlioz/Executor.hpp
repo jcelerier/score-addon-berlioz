@@ -35,7 +35,7 @@ struct sound_data
 
     static QString pythonData(const chord_info& chord)
     {
-        return QString("['%1', '%2', '%3'], ").arg(
+        return QString("['%1', '%2', '%3']").arg(
                         chord.instrument,
                         chord.articulation,
                         chord.chord);
@@ -47,6 +47,7 @@ struct sound_data
         for(const auto& val : data)
         {
             s += pythonData(val);
+            s += ", ";
         }
         if(data.size() > 0)
             s.resize(s.size() - 2);
