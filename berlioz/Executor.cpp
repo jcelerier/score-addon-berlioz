@@ -13,16 +13,15 @@
 namespace berlioz
 {
 ProcessExecutorComponent::ProcessExecutorComponent(
-    Engine::Execution::IntervalComponent& parentInterval,
     berlioz::Model& element,
     const Engine::Execution::Context& ctx,
     const Id<score::Component>& id,
     QObject* parent):
   ProcessComponent_T{
-    parentInterval, element, ctx, id, "berliozExecutorComponent", parent}
+      element, ctx, id, "berliozExecutorComponent", parent}
 {
-  auto dur = parentInterval.OSSIAInterval()->get_nominal_duration();
-  auto node = std::make_shared<berlioz_node>(dur, element, ctx.doc.app.guiApplicationPlugin<ApplicationPlugin>());
+  auto dur = element.duration();
+  auto node = std::make_shared<berlioz_node>(ctx.time(dur), element, ctx.doc.app.guiApplicationPlugin<ApplicationPlugin>());
   node->rate = element.rate();
   node->instrus = element.instrus().toStdString();
   node->start_attrib = element.startAttrib().toStdString();
@@ -41,7 +40,7 @@ ProcessExecutorComponent::ProcessExecutorComponent(
 
 void berlioz_node::run(ossia::token_request tk, ossia::execution_state& st)
 {
-  if(tk.date > (last_tick + rate) || tk.date == ossia::Zero)
+  if(tk.date > (last_tick.impl + rate) || tk.date == ossia::Zero)
   {
     last_tick = tk.date;
     chord_request req;
@@ -49,7 +48,8 @@ void berlioz_node::run(ossia::token_request tk, ossia::execution_state& st)
     req.node = shared_from_this();
     req.position = tk.position < 0.5 ? 1 - tk.position : tk.position;
     req.attribute = tk.position < 0.5 ? start_attrib : end_attrib;
-    req.nInstruments = ossia::clamp(ossia::convert<int>(inputs()[0]->data.target<ossia::value_port>()->data), 2, 4);
+    for(auto& tv: inputs()[0]->data.target<ossia::value_port>()->get_data())
+        req.nInstruments = ossia::clamp(ossia::convert<int>(tv.value), 2, 4);
     plug.request_chords.enqueue(req);
   }
 
@@ -71,14 +71,18 @@ void berlioz_node::run(ossia::token_request tk, ossia::execution_state& st)
 
   if(!cur_node)
   {
-    std::pair<std::string, std::shared_ptr<ossia::sound_node>> p;
+    std::pair<sound_data, std::shared_ptr<ossia::sound_node>> p;
     while(retrieve_files.try_dequeue(p))
     {
-      element.sig_addFile(QString::fromStdString(p.first));
       cur_node = p.second;
       req.date = 0;
       req_prev_date = 0;
       cur_node->outputs() = outputs();
+    }
+    if(p.second)
+    {
+        element.sig_addFile(p.first.prettyData());
+        plug.sig_addChord(p.first.data);
     }
   }
 }

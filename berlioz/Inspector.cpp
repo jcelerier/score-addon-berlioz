@@ -76,7 +76,7 @@ InspectorWidget::InspectorWidget(
             this, [=,&context,&object] (int x) {
       CommandDispatcher<> disp(context.commandStack);
       if(dur->value() != object.rate())
-        disp.submitCommand<SetRate>(object, x * 44.1);
+        disp.submitCommand<SetRate>(object, (int)(x * 44.1));
     });
 
 }

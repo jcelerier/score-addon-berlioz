@@ -3,12 +3,12 @@
 namespace berlioz
 {
 
-std::vector<Process::Port*> Model::inlets() const
+Process::Inlets Model::inlets() const
 {
   return {inlet.get()};
 }
 
-std::vector<Process::Port*> Model::outlets() const
+Process::Outlets Model::outlets() const
 {
   return {outlet.get()};
 }
@@ -81,8 +81,8 @@ Model::Model(
     const Id<Process::ProcessModel>& id,
     QObject* parent):
   Process::ProcessModel{duration, id, "berliozProcess", parent}
-, inlet{std::make_unique<Process::Port>(Id<Process::Port>(0), this)}
-, outlet{std::make_unique<Process::Port>(Id<Process::Port>(1), this)}
+, inlet{Process::make_inlet(Id<Process::Port>(0), this)}
+, outlet{Process::make_outlet(Id<Process::Port>(1), this)}
 {
   m_startAttrib = "Brightness";
   m_endAttrib = "Dullness";
@@ -92,7 +92,6 @@ Model::Model(
   inlet->setCustomData("Instruments");
 
   outlet->setPropagate(true);
-  outlet->outlet = true;
   outlet->type = Process::PortType::Audio;
   outlet->setCustomData("Audio Out");
   connect(this, &Model::sig_addFile,
@@ -105,8 +104,8 @@ Model::Model(
     const Id<Process::ProcessModel>& id,
     QObject* parent):
   Process::ProcessModel{source, id, "berliozProcess", parent}
-, inlet{std::make_unique<Process::Port>(source.inlet->id(), *source.inlet, this)}
-, outlet{std::make_unique<Process::Port>(source.outlet->id(), *source.outlet, this)}
+, inlet{Process::clone_inlet(*source.inlet, this)}
+, outlet{Process::clone_outlet(*source.outlet, this)}
 , m_startAttrib{source.m_startAttrib}
 , m_endAttrib{source.m_endAttrib}
 , m_instrus{source.m_instrus}
@@ -170,8 +169,8 @@ void DataStreamWriter::write(
     berlioz::Model& proc)
 {
   m_stream >> proc.m_rate;
-  proc.inlet = std::make_unique<Process::Port>(*this, &proc);
-  proc.outlet = std::make_unique<Process::Port>(*this, &proc);
+  proc.inlet = Process::make_inlet(*this, &proc);
+  proc.outlet = Process::make_outlet(*this, &proc);
   m_stream >> proc.m_startAttrib >> proc.m_endAttrib >> proc.m_instrus;
 
   checkDelimiter();
@@ -196,11 +195,11 @@ void JSONObjectWriter::write(
   proc.m_rate = obj["Rate"].toInt();
   {
     JSONObjectWriter writer{obj["Inlet"].toObject()};
-    proc.inlet = std::make_unique<Process::Port>(writer, &proc);
+    proc.inlet = Process::make_inlet(writer, &proc);
   }
   {
     JSONObjectWriter writer{obj["Outlet"].toObject()};
-    proc.outlet = std::make_unique<Process::Port>(writer, &proc);
+    proc.outlet = Process::make_outlet(writer, &proc);
   }
   proc.m_startAttrib = obj["StartAttrib"].toString();
   proc.m_endAttrib = obj["EndAttrib"].toString();

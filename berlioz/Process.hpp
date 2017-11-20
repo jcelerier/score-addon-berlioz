@@ -47,10 +47,10 @@ class Model final
     QString endAttrib() const;
     QString instrus() const;
 
-    std::vector<Process::Port*> inlets() const override;
-    std::vector<Process::Port*> outlets() const override;
-    std::unique_ptr<Process::Port> inlet;
-    std::unique_ptr<Process::Port> outlet;
+    Process::Inlets inlets() const override;
+    Process::Outlets outlets() const override;
+    std::unique_ptr<Process::Inlet> inlet;
+    std::unique_ptr<Process::Outlet> outlet;
 
     const QStringList& playedFiles() const { return m_files; }
     QStringList& playedFiles() { return m_files; }

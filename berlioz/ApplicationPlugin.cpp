@@ -1,5 +1,8 @@
 #include "ApplicationPlugin.hpp"
 #include <berlioz/Executor.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/replace.hpp>
+#include <QFile>
 namespace berlioz
 {
 
@@ -7,17 +10,30 @@ ApplicationPlugin::ApplicationPlugin(
     const score::GUIApplicationContext& ctx):
   score::GUIApplicationPlugin{ctx}
 {
+    connect(this, &ApplicationPlugin::sig_addChord,
+            this, &ApplicationPlugin::addChord,
+            Qt::QueuedConnection);
 
   auto& play_action = ctx.actions.action<Actions::Play>();
 
   connect(
       play_action.action(), &QAction::triggered, this,
-      [&](bool b) { must_stop = false; }, Qt::QueuedConnection);
+      [&](bool b) {
+      must_stop = false;
+  }, Qt::QueuedConnection);
 
   auto& stop_action = ctx.actions.action<Actions::Stop>();
   connect(
       stop_action.action(), &QAction::triggered, this,
-      [&](bool b) { must_stop = true; }, Qt::QueuedConnection);
+      [&](bool b) {
+      must_stop = true;
+
+      // Write chords to a file
+      QFile f("lastRun.chords");
+      if(f.open(QIODevice::WriteOnly))
+          f.write(sound_data::pythonData(m_playedChords).toUtf8());
+      m_playedChords.clear();
+  }, Qt::QueuedConnection);
 
   thread = std::thread{[=] {
     using namespace pybind11::literals;
@@ -52,7 +68,8 @@ ApplicationPlugin::~ApplicationPlugin()
 
 }
 
-const std::pair<const float, std::string>&ApplicationPlugin::closest(const std::map<float, std::string>& map, float pos)
+const std::pair<const float, sound_data>&
+ApplicationPlugin::closest(const std::map<float, sound_data>& map, float pos)
 {
   auto low = map.lower_bound(pos);
   if (low == map.end()) {
@@ -82,6 +99,33 @@ void ApplicationPlugin::do_fade(std::vector<float>& ap)
   }
 }
 
+
+std::vector<berlioz::chord_info> extract_data(const std::string& str)
+{
+    std::vector<berlioz::chord_info> chord_info;
+    std::vector<std::string> chords;
+    std::string input =  str;
+    boost::algorithm::replace_all(input, "__", "$");
+    boost::algorithm::split(chords, input, boost::is_any_of("$"));
+
+    for(auto& chord : chords)
+    {
+        berlioz::chord_info info;
+
+        std::vector<std::string> res;
+        boost::algorithm::split(res, chord, boost::is_any_of("_"));
+        if(res.size() >= 4)
+        {
+            info.instrument = QString::fromStdString(res[0]);
+            info.articulation = QString::fromStdString(res[1]);
+            info.chord = QString::fromStdString(res[3]);
+            chord_info.push_back(std::move(info));
+        }
+    }
+
+    return chord_info;
+}
+
 void ApplicationPlugin::generateNextChord(chord_request cur)
 {
   berlioz_node& node = *cur.node;
@@ -90,7 +134,7 @@ void ApplicationPlugin::generateNextChord(chord_request cur)
 
   try {
     auto fun = m_module.attr("generate");
-    std::string file;
+    sound_data file;
 
     if(is_start)
     {
@@ -101,7 +145,9 @@ void ApplicationPlugin::generateNextChord(chord_request cur)
         auto attr = res[0].cast<float>();
         if(!node.start_range || (attr > node.start_range->first && attr < node.start_range->second))
         {
-          node.start_sounds.insert({attr, res[1].cast<std::string>()});
+          node.start_sounds.insert({attr,
+                                    {QString::fromStdString(res[1].cast<std::string>()),
+                                     extract_data(res[2].cast<std::string>())}});
         }
         auto t1 = std::chrono::steady_clock::now();
         if(t1 - t0 > std::chrono::milliseconds(500))
@@ -126,7 +172,9 @@ void ApplicationPlugin::generateNextChord(chord_request cur)
         auto attr = res[0].cast<float>();
         if(!node.end_range || (attr > node.end_range->first && attr < node.end_range->second))
         {
-          node.end_sounds.insert({attr, res[1].cast<std::string>()});
+          node.end_sounds.insert({attr,
+                                    {QString::fromStdString(res[1].cast<std::string>()),
+                                     extract_data(res[2].cast<std::string>())}});
         }
         auto t1 = std::chrono::steady_clock::now();
         if(t1 - t0 > std::chrono::milliseconds(500))
@@ -144,16 +192,16 @@ void ApplicationPlugin::generateNextChord(chord_request cur)
       file = cls.second;
     }
 
-    if(!file.empty())
+    if(!file.filename.isEmpty())
     {
-      auto decoded = Media::AudioDecoder::decode_synchronous(QString::fromStdString(file));
+      auto decoded = Media::AudioDecoder::decode_synchronous(file.filename);
       if(decoded)
       {
         auto sndnode = std::make_shared<ossia::sound_node>();
         sndnode->set_upmix(2);
         for(auto& chan : decoded->second)
         {
-          auto sz = std::min(chan.size(), node.rate);
+          auto sz = std::min(chan.size(), (std::size_t)node.rate);
           chan.resize(sz);
           do_fade(chan);
         }
@@ -166,6 +214,12 @@ void ApplicationPlugin::generateNextChord(chord_request cur)
   {
     qDebug() << "PyBind error: " << e.what();
   }
+
+}
+
+void ApplicationPlugin::addChord(std::vector<chord_info> c)
+{
+    m_playedChords.push_back(c);
 
 }
 
